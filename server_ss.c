@@ -2,14 +2,18 @@
 #include "SS_client.h"
 #include "SS_NM.h"
 
-#define CLIENT_PORT 8082
-#define NM_PORT 8081
+#define CLIENT_PORT 8089
+#define NM_PORT 8087
 
 StorageServer this;
 int nm_socket;
+int nm_port;
+const char* ip_address;
 pthread_t nm_thread;
 pthread_t client_thread;
 
+
+void* process_requests(void* arg);
 void initialise_to_nm(int client_socket,const char* ip_address);
 void handle_client(int client_socket);
 void create_file(int client_socket, const char *filepath);
@@ -31,20 +35,18 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    int nm_port = atoi(argv[1]);
-    const char* ip_address = argv[2];
+    nm_port = atoi(argv[1]);
+    ip_address = argv[2];
     nm_socket = connect_to_nm(nm_port,ip_address);
-
-    printf("Nm socket:%d\n", nm_socket);
-
     if (nm_socket < 0) {
         fprintf(stderr, "Failed to connect to Name Manager\n");
         exit(EXIT_FAILURE);
     }
     const char* my_ip = "10.42.0.90";
-    
     // Initialize and send storage server info to NM
     initialise_to_nm(nm_socket,my_ip);
+
+
 
     // Create threads for NM and client
     if (pthread_create(&nm_thread, NULL, handle_nm_thread, &nm_socket) != 0) {
@@ -66,32 +68,98 @@ int main(int argc, char *argv[]) {
 }
 
 void *handle_nm_thread(void *arg) {
+    // // int client_socket = connect_to_nm(nm_port,ip_address);
+    // // char buffer[BUFFER_SIZE];
+    // // memset(buffer, 0, BUFFER_SIZE);
+    // printf("Waiting for commands from NM...\n");
+    // while (1) {
+    //     int naming_server = connect_to_nm()
+    //     // int client_socket = connect_to_nm(nm_port,ip_address);
+    //     // char buffer[BUFFER_SIZE];
+    //     // memset(buffer, 0, BUFFER_SIZE);
+    //     int accept_status = accept()
+    //     int bytes_received = recv(client_socket, buffer, BUFFER_SIZE, 0);
+    //     if (bytes_received <= 0) {
+    //         perror("Failed to receive command from NM");
+    //         break;
+    //     }
+
+    //     buffer[bytes_received] = '\0';
+    //     printf("Command from NM: %s\n", buffer);
+
+    //     if (strcmp(buffer, "exit") == 0) {
+    //         printf("Received 'exit' command from NM. Shutting down NM thread...\n");
+    //         break;
+    //     } else {
+    //         handle_nm(client_socket, buffer);
+    //     }
+    // }
+
+    // printf("NM thread exiting...\n");
+    // pthread_exit(NULL);
+    struct sockaddr_in client_addr;
+    socklen_t client_addr_len = sizeof(client_addr);
+    int client_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (client_socket < 0)
+    {
+        perror("Error in creating client socket");
+        exit(1);
+    }
+    client_addr.sin_family = AF_INET;
+    client_addr.sin_port = htons(NM_PORT);
+    client_addr.sin_addr.s_addr = INADDR_ANY;
+    if (bind(client_socket, (struct sockaddr *)&client_addr, sizeof(client_addr)) < 0)
+    {
+        perror("Error in binding client socket");
+        exit(1);
+    }
+    int listen_status = listen(client_socket,100);
+    if (listen_status < 0)
+    {
+        perror("Error in listening to client socket");
+        exit(1);
+    }
+    while (1)
+    {
+        printf("Waiting for client connection\n");
+        int accept_status = accept(client_socket, (struct sockaddr *)&client_addr, &client_addr_len);
+        if (accept_status < 0)
+        {
+            perror("Error in accepting connection from client");
+            exit(1);
+        }
+        pthread_t thread;
+        pthread_create(&thread, NULL, process_requests, &accept_status);
+        // pthread_detach(thread);
+    }
+}
+
+void *process_requests(void *arg) {
     int client_socket = *(int *)arg;
-    printf("NM socket in thread: %d\n", client_socket);
     char buffer[BUFFER_SIZE];
     memset(buffer, 0, BUFFER_SIZE);
-    printf("Waiting for commands from NM...\n");
-    while (1) {
+
+    while(1){
         int bytes_received = recv(client_socket, buffer, BUFFER_SIZE, 0);
         if (bytes_received <= 0) {
             perror("Failed to receive command from NM");
+            close(client_socket);
             break;
-        }   
+        }
+        printf("Received command:%s\n",buffer);
         buffer[bytes_received] = '\0';
-        printf("Command from NM: %s\n", buffer);
-
-        if (strcmp(buffer, "exit") == 0) {
+        if(strcmp(buffer,"exit")==0){
             printf("Received 'exit' command from NM. Shutting down NM thread...\n");
             break;
-        } else {
-            handle_nm(client_socket, buffer);
         }
+        else{
+            handle_nm(client_socket,buffer);
+        }
+        // send(client_socket, "Received", strlen("Received"), 0);
     }
-
     printf("NM thread exiting...\n");
     pthread_exit(NULL);
 }
-
 void *handle_client_thread(void *arg) {
     int server_socket, client_socket;
     struct sockaddr_in server_addr, client_addr;
@@ -227,6 +295,7 @@ void initialise_to_nm(int client_socket,const char* ip_address){
         
     }
     send(client_socket, temp,sizeof(temp),0);
+    // close(client_socket);
 }
 
 void handle_client(int client_socket) {
@@ -321,22 +390,26 @@ void read_file(int client_socket, const char *filename) {
 
     // Calculate total number of chunks
     int total_chunks = (file_size + CHUNK_SIZE - 1) / CHUNK_SIZE;
+    // total_chunks++;
+    printf("total chunks: %d\n", total_chunks);
 
     packet pkt;
     int bytes_read;
     for (int seq_num = 0; seq_num < total_chunks; seq_num++) {
+        memset(&pkt, 0, sizeof(pkt));
         pkt.seq_num = seq_num;
         pkt.total_chunks = total_chunks;
-        memset(pkt.data, 0, CHUNK_SIZE);
+        // memset(pkt.data, 0, CHUNK_SIZE);
         bytes_read = fread(pkt.data, 1, CHUNK_SIZE, file);
-        printf("packet data: %s\n",pkt.data);
+        printf("seq_num: %d\n, packet data: %s\n",pkt.seq_num,pkt.data);
         // Send packet data
         send(client_socket, &pkt, sizeof(pkt), 0);
     }
-    memset(pkt.data, 0, CHUNK_SIZE);
+    memset(&pkt, 0, sizeof(pkt));
     pkt.seq_num = -1;
     pkt.total_chunks = 1;
     char* message = "File sent successfully\n";
+    // memset(pkt.data, 0, CHUNK_SIZE);
     strcpy(pkt.data, message);
     send(client_socket, &pkt, sizeof(pkt), 0);
     printf("file size: %ld\n", file_size);
@@ -360,20 +433,18 @@ void create_file(int client_socket, const char *filepath) {
         printf("File already exists\n");
         send(client_socket, "File already exists\n", 20, 0);
         fclose(temp_file);
-        return;
+        return; 
     }
-    printf("Nm socket: %d",client_socket);
     // fclose(temp_file);
     printf("Creating file: %s\n", filepath);
     FILE *file = fopen(filepath, "w");
     if (!file) {
         printf("Failed to create file\n");
-        send(nm_socket, "Failed to create file\n", 23, 0);
+        send(client_socket, "Failed to create file\n", 23, 0);
         return;
     }
-    
-    send(client_socket, "File created successfully\n", strlen("File created successfully\n"), 0);
-    // printf("%s",message);
+    printf("File created successfully\n");
+    send(client_socket, "File created successfully\n", 26, 0);
     fclose(file);
 }
 
@@ -522,9 +593,6 @@ void write_to_file(int client_socket, const char *filename) {
             break;
         memset(&pkt, 0, sizeof(pkt));
     }
-    memset(&pkt, 0, sizeof(pkt));
-    strcpy(pkt.data, "File written successfully\n");
-    pkt.seq_num = -1;
-    send(client_socket, &pkt, sizeof(pkt), 0);
+    send(client_socket,"File modified successfully",strlen("File modified successfully"),0);
     fclose(file);
 }
