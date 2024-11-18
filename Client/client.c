@@ -7,6 +7,8 @@
 #define CHUNK_SIZE 256 // Define the size of each data chunk
 #define MAX_ACCESSIBLE_PATHS 100
 #define MAX_FILE_SIZE 4096
+#define MAX_CHUNK_WRITE 40
+#define THRESHOLD 20
 
 // Define the packet structure
 typedef struct packet
@@ -22,7 +24,7 @@ int NM_PORT;
 
 void play_audio_stream(int server_socket);
 void handle_nm(char *input,int nm_socket);
-void handle_ss(char *input,char *buff);
+void handle_ss(char *input,char *buff,int nm_socket);
 void play_mp3(const char *filename);
 
 int main(int argc,char* argv[])
@@ -92,15 +94,16 @@ void handle_nm(char *input,int nm_socket)
         buffer[bytes_received] = '\0';
         if(strncmp(input,"READ",4)==0 || strncmp(input,"WRITE",5)==0 || strncmp(input,"STREAM",6)==0 || strncmp(input,"GET_INFO",8)==0)
         {
-            handle_ss(input,buffer);
+            handle_ss(input,buffer,nm_socket);
             close(nm_socket);
             return;
         }
         printf("Naming Server: %s\n", buffer);
     }
-
+    // PENDING CODE FOR CREATE ,DELETE, LIST BY CHECkING NM CODE
+    
 }
-void handle_ss(char *input,char *buff)
+void handle_ss(char *input,char *buff,int nm_socket)
 {
     char ss_ip[INET_ADDRSTRLEN];
     int ss_port;
@@ -109,7 +112,7 @@ void handle_ss(char *input,char *buff)
         return;
     sscanf(buff, "%s %d", ss_ip, &ss_port);
     // Connect to storage server
-    // ss_port=8083;
+    // ss_port=8080;
     // sprintf(ss_ip, "%s", "10.42.0.89");
     int ss_socket;
     struct sockaddr_in ss_addr;
@@ -183,28 +186,36 @@ void handle_ss(char *input,char *buff)
                 goto last;
             }
         }
-        char data[CHUNK_SIZE];
+        packet write_pkt[MAX_CHUNK_WRITE];
+        // char data[CHUNK_SIZE];
         int seq_num=0;
-        while(1)
+        for(int i=0;i<MAX_CHUNK_WRITE;i++)
         {
-            memset(data,0,CHUNK_SIZE);
+            // memset(data,0,CHUNK_SIZE);
             memset(&pkt,0,sizeof(pkt));
-            fgets(data, CHUNK_SIZE, stdin);
-            strcpy(pkt.data,data);
-            if(strncmp(data,"$STOP",5)==0)
+            fgets(write_pkt[i].data, CHUNK_SIZE, stdin);
+            if(strncmp(write_pkt[i].data,"$STOP",5)==0)
             {
-                pkt.seq_num=-1;
-                send(ss_socket, &pkt, sizeof(pkt), 0);
+                write_pkt[i].seq_num=-1;
+                // send(ss_socket, &pkt, sizeof(pkt), 0);
                 break;
             }
+            // seq_num++;
+            write_pkt[i].seq_num=seq_num;
             seq_num++;
-            pkt.seq_num=seq_num;
-            send(ss_socket, &pkt, sizeof(pkt), 0);
+            // send(ss_socket, &pkt, sizeof(pkt), 0);
+        }
+        for(int i=0;i<MAX_CHUNK_WRITE;i++)
+        {
+            send(ss_socket, &write_pkt[i], sizeof(write_pkt[i]), 0);
+            if(write_pkt[i].seq_num==-1)
+                break;
         }
         char buffer[BUFFER_SIZE];
         memset(buffer,0,BUFFER_SIZE);
         recv(ss_socket, buffer, BUFFER_SIZE, 0);
         printf("%s\n", buffer);
+        
     }
     else if(strncmp(input,"STREAM",6)==0)
     {
@@ -215,7 +226,7 @@ void handle_ss(char *input,char *buff)
 }
 void play_audio_stream(int server_socket)
 {
-    FILE *ffplaypipe=popen("ffplay -nodisp -autoexit -", "w");
+    FILE *ffplaypipe=popen("ffplay -autoexit -", "w");
     if(ffplaypipe==NULL)
     {
         printf("ffplay failed\n");
