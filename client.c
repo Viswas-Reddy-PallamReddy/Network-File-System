@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <arpa/inet.h>
 #define CHUNK_SIZE 256 // Define the size of each data chunk
 #define MAX_ACCESSIBLE_PATHS 100
@@ -97,8 +98,7 @@ void handle_nm(char *input,int nm_socket)
         }
         printf("Naming Server: %s\n", buffer);
     }
-    // PENDING CODE FOR CREATE ,DELETE, LIST BY CHECkING NM CODE
-    
+
 }
 void handle_ss(char *input,char *buff)
 {
@@ -109,6 +109,8 @@ void handle_ss(char *input,char *buff)
         return;
     sscanf(buff, "%s %d", ss_ip, &ss_port);
     // Connect to storage server
+    // ss_port=8083;
+    // sprintf(ss_ip, "%s", "10.42.0.89");
     int ss_socket;
     struct sockaddr_in ss_addr;
 
@@ -213,46 +215,39 @@ void handle_ss(char *input,char *buff)
 }
 void play_audio_stream(int server_socket)
 {
-    FILE *output_file;
-    packet pkt;
-    int total_a_chunks;
-    // Open a file to save the received audio data
-    output_file = fopen("received_audio.mp3", "wb");
-    if (output_file == NULL)
+    FILE *ffplaypipe=popen("ffplay -nodisp -autoexit -", "w");
+    if(ffplaypipe==NULL)
     {
-        perror("Failed to open file for writing");
+        printf("ffplay failed\n");
         return;
     }
 
-    printf("Receiving and saving audio data to file...\n");
-    int bytes_received;
-    int rev=0;
-    // Receive and write audio data to the file
-    while (1)
+    char buffer[256];
+    ssize_t bytes_received;
+    int firstTime=1;
+    while(1)
     {
-        bytes_received = recv(server_socket,&pkt, sizeof(pkt), 0);
-        if(bytes_received <= 0)         
+        bytes_received = recv(server_socket, buffer, 256, 0);
+        if (bytes_received <= 0)
+        {
+            if(bytes_received==0)
+                printf("End of Stream\n");
+            else
+            {
+                if(firstTime==1)
+                    printf("File not Found\n"); 
+                else
+                    printf("Error\n");    
+            }
+            break;        
+        }
+        if(fwrite(buffer, 1, bytes_received, ffplaypipe) != (size_t)bytes_received)
+        {
+            printf("Error writing to pipe\n");
             break;
-        if(rev==0)
-            total_a_chunks=pkt.total_chunks;
-        rev++;    
-        fwrite(pkt.data, 1, CHUNK_SIZE, output_file);
-        if(rev==total_a_chunks)
-            break;
+        }
+        fflush(ffplaypipe);
+        firstTime=0;
     }
-
-    fclose(output_file);
-    printf("Audio data saved to 'received_audio.mp3'.\n");
-
-    // Play the saved audio file using mpv
-    printf("Playing audio file...\n");
-    play_mp3("received_audio.mp3");
-    printf("Audio playback finished.\n");
-    // remove("received_audio.mp3");
-}
-
-void play_mp3(const char *filename) {
-    char command[256];
-    snprintf(command, sizeof(command), "mpv --no-terminal --really-quiet %s", filename);
-    system(command);
+    pclose(ffplaypipe);
 }
