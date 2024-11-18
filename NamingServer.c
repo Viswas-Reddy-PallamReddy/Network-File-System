@@ -226,41 +226,125 @@ int file_path(const char *path)
     return details_of_storage_server;
 }
 
-void print_all_accessible_paths(int accept_status_1)
-{
-    // print all accessible paths
-    printf("Printing all accessible paths\n");
-    printf("Number of storage servers are : %d\n", storage_server_count);
-    int total_paths = 0;
-    for (int i = 0; i < INITIAL_STORAGE_SERVERS; i++)
-    {
-        int number_of_paths = storage_servers[i].num_accessible_paths;
-        printf("Number of paths are : %d\n", number_of_paths);
-        for (int j = 0; j < number_of_paths; j++)
-        {
-            total_paths++;
-            printf("%s\n", storage_servers[i].accessible_paths[j]);
-        }
-    }
-    char temp_store[MAX_FILE_NAME_SIZE];
+// void print_all_accessible_paths(int accept_status_1)
+// {
+//     // print all accessible paths
+//     printf("Printing all accessible paths\n");
+//     printf("Number of storage servers are : %d\n", storage_server_count);
+//     int total_paths = 0;
+//     for (int i = 0; i < INITIAL_STORAGE_SERVERS; i++)
+//     {
+//         int number_of_paths = storage_servers[i].num_accessible_paths;
+//         printf("Number of paths are : %d\n", number_of_paths);
+//         for (int j = 0; j < number_of_paths; j++)
+//         {
+//             total_paths++;
+//             printf("%s\n", storage_servers[i].accessible_paths[j]);
+//         }
+//     }
+//     char temp_store[MAX_FILE_NAME_SIZE];
 
-    for (int i = 0; i < INITIAL_STORAGE_SERVERS; i++)
-    {
-        for (int j = 0; j < storage_servers[i].num_accessible_paths; j++)
-        {
-            strcat(temp_store, storage_servers[i].accessible_paths[j]);
-            if (i == INITIAL_STORAGE_SERVERS - 1 && j == storage_servers[i].num_accessible_paths - 1)
-            {
-                //
-            }
-            else
-            {
-                strcat(temp_store, "\n");
-            }
+//     for (int i = 0; i < INITIAL_STORAGE_SERVERS; i++)
+//     {
+//         for (int j = 0; j < storage_servers[i].num_accessible_paths; j++)
+//         {
+//             strcat(temp_store, storage_servers[i].accessible_paths[j]);
+//             if (i == INITIAL_STORAGE_SERVERS - 1 && j == storage_servers[i].num_accessible_paths - 1)
+//             {   
+//                 //
+//             }
+//             else
+//             {
+//                 strcat(temp_store, "\n");
+//             }
+//         }
+//     }
+//     usleep(1000);
+//     send(accept_status_1, temp_store, sizeof(temp_store), 0);
+// }
+// Helper function to traverse trie and collect paths
+void traverse_and_collect_paths(TrieNode* node, char* current_path, int depth, 
+                              char** paths, int* path_count, int max_paths) {
+    if (!node || *path_count >= max_paths) {
+        return;
+    }
+
+    // If this is an end node with a server, save the path
+    if (node->isEndOfPath && node->server) {
+        current_path[depth] = '\0';  // Null terminate the current path
+        paths[*path_count] = strdup(current_path);  // Make a copy of the path
+        if (paths[*path_count]) {  // Check if strdup succeeded
+            (*path_count)++;
         }
     }
+
+    // Traverse all possible children
+    for (int i = 0; i < 256; i++) {
+        if (node->children[i]) {
+            current_path[depth] = (char)i;
+            traverse_and_collect_paths(node->children[i], current_path, 
+                                    depth + 1, paths, path_count, max_paths);
+        }
+    }
+}
+
+// Modified print_all_accessible_paths function
+void print_all_accessible_paths(TrieNode* root, int accept_status_1) {
+    if (!root) {
+        fprintf(stderr, "[ERROR] print_all_accessible_paths: Null trie root\n");
+        return;
+    }
+
+    // Initialize variables for path collection
+    const int MAX_PATHS = 1000;  // Adjust based on your needs
+    const int MAX_PATH_LENGTH = 4096;  // Maximum path length
+    char** paths = malloc(MAX_PATHS * sizeof(char*));
+    char* current_path = malloc(MAX_PATH_LENGTH * sizeof(char));
+    int path_count = 0;
+
+    if (!paths || !current_path) {
+        fprintf(stderr, "[ERROR] print_all_accessible_paths: Memory allocation failed\n");
+        free(paths);
+        free(current_path);
+        return;
+    }
+
+    // Collect all paths from the trie
+    traverse_and_collect_paths(root, current_path, 0, paths, &path_count, MAX_PATHS);
+
+    // Print paths and prepare response
+    printf("Printing all accessible paths\n");
+    printf("Number of paths: %d\n", path_count);
+
+    // Prepare response string
+    char* temp_store = malloc(MAX_PATHS * MAX_PATH_LENGTH * sizeof(char));
+    if (!temp_store) {
+        fprintf(stderr, "[ERROR] print_all_accessible_paths: Memory allocation failed for temp_store\n");
+        goto cleanup;
+    }
+    temp_store[0] = '\0';  // Initialize empty string
+
+    // Build response string
+    for (int i = 0; i < path_count; i++) {
+        printf("%s\n", paths[i]);  // Print to console
+        strcat(temp_store, paths[i]);
+        if (i < path_count - 1) {
+            strcat(temp_store, "\n");
+        }
+    }
+
+    // Send response
     usleep(1000);
-    send(accept_status_1, temp_store, sizeof(temp_store), 0);
+    send(accept_status_1, temp_store, strlen(temp_store) + 1, 0);
+
+cleanup:
+    // Clean up allocated memory
+    for (int i = 0; i < path_count; i++) {
+        free(paths[i]);
+    }
+    free(paths);
+    free(current_path);
+    free(temp_store);
 }
 
 void send_to_client(int accept_status_1, int ss_number)
@@ -369,10 +453,14 @@ void *process_client_requests(void *accept_status)
         {
             send_to_client(accept_status_1, ss_number);
         }
+        else
+        {
+            send(accept_status_1, "Path not found\n", strlen("Path not found\n"), 0);
+        }
     }
     else if (strncmp(buffer, "LIST", 4) == 0)
     {
-        print_all_accessible_paths(accept_status_1);
+        print_all_accessible_paths(trie_root, accept_status_1);
     }
     else if (strncmp(buffer, "WRITE", 5) == 0) /// need to handle concurrent write requests from multiple clients to same file
     {
@@ -380,6 +468,10 @@ void *process_client_requests(void *accept_status)
         if (ss_number != -1)
         {
             send_to_client(accept_status_1, ss_number);
+        }
+        else
+        {
+            send(accept_status_1, "Path not found\n", strlen("Path not found\n"), 0);
         }
     }
     else if (strncmp(buffer, "GET_INFO", 8) == 0)
@@ -389,6 +481,10 @@ void *process_client_requests(void *accept_status)
         {
             send_to_client(accept_status_1, ss_number);
         }
+        else
+        {
+            send(accept_status_1, "Path not found\n", strlen("Path not found\n"), 0);
+        }
     }
     else if (strncmp(buffer, "STREAM", 6) == 0)
     {
@@ -397,6 +493,10 @@ void *process_client_requests(void *accept_status)
         if (ss_number != -1)
         {
             send_to_client(accept_status_1, ss_number);
+        }
+        else
+        {
+            send(accept_status_1, "Path not found\n", strlen("Path not found\n"), 0);
         }
     }
     else if (strncmp(buffer, "DELETE", 6) == 0) //// i have to remove it from the cache also
@@ -582,29 +682,15 @@ void *process_client_requests(void *accept_status)
             send(accept_status_1, bufr, strlen(bufr), 0);
 
         }
+        else
+        {
+            printf("Storage server not found\n");
+            send(accept_status_1, "Path not found\n", strlen("Path not found\n"), 0);
+        }
     }
     else if (strncmp(buffer, "SERVER", 6) == 0)
     {
         add_storage_server(accept_status_1);
-    }
-    else if (strncmp(buffer, "SE", 2) == 0)
-    {
-        int ss_number = file_path(buffer + 3);
-        if (ss_number != -1)
-        {
-            printf("Sending HI to storage server\n");
-            send(storage_servers[ss_number].file_descriptor, "HI", strlen("HI"), 0);
-            printf("received Hello from storage server\n");
-            char temp_reply[4096];
-            int bytes_received = recv(storage_servers[ss_number].file_descriptor, temp_reply, 50, 0);
-            if (bytes_received < 0)
-            {
-                perror("Error in receiving data from storage server");
-                exit(1);
-            }
-            temp_reply[bytes_received] = '\0';
-            printf("Received request from storage server: %s\n", temp_reply);
-        }
     }
     else
     {
@@ -616,44 +702,44 @@ void *process_client_requests(void *accept_status)
     close(accept_status_1);
 }
 
-// Global cache instance
-LRUCache *file_location_cache = NULL;
+// // Global cache instance
+// LRUCache *file_location_cache = NULL;
 
-// Initialize cache at program startup
-void init_file_location_cache()
-{
-    cache_error_t error;
-    file_location_cache = init_cache(1000, &error); // Adjust capacity as needed
-    if (!file_location_cache)
-    {
-        fprintf(stderr, "Failed to initialize cache: %s\n", cache_error_string(error));
-        exit(1);
-    }
-}
+// // Initialize cache at program startup
+// void init_file_location_cache()
+// {
+//     cache_error_t error;
+//     file_location_cache = init_cache(1000, &error); // Adjust capacity as needed
+//     if (!file_location_cache)
+//     {
+//         fprintf(stderr, "Failed to initialize cache: %s\n", cache_error_string(error));
+//         exit(1);
+//     }
+// }
 
 // Helper function to handle cache operations for file lookups
-int get_storage_server_with_cache(const char *filepath)
-{
-    if (!filepath)
-        return -1;
+// int get_storage_server_with_cache(const char *filepath)
+// {
+//     if (!filepath)
+//         return -1;
 
-    // Try to get from cache first
-    int ss_number = cache_get(file_location_cache, filepath);
-    if (ss_number != -1)
-    {
-        return ss_number;
-    }
+//     // Try to get from cache first
+//     int ss_number = cache_get(file_location_cache, filepath);
+//     if (ss_number != -1)
+//     {
+//         return ss_number;
+//     }
 
-    // Cache miss - look up in trie
-    ss_number = file_path(filepath);
-    if (ss_number != -1)
-    {
-        // Add to cache for future lookups
-        cache_put(file_location_cache, filepath, ss_number);
-    }
+//     // Cache miss - look up in trie
+//     ss_number = file_path(filepath);
+//     if (ss_number != -1)
+//     {
+//         // Add to cache for future lookups
+//         cache_put(file_location_cache, filepath, ss_number);
+//     }
 
-    return ss_number;
-}
+//     return ss_number;
+// }
 
 // void *process_client_requests(void *accept_status)
 // {
@@ -753,16 +839,16 @@ int get_storage_server_with_cache(const char *filepath)
 //     return NULL;
 // }
 
-// Clean up cache when shutting down
-void cleanup_cache()
-{
-    if (file_location_cache)
-    {
-        print_cache_stats(file_location_cache); // Print final statistics
-        free_cache(file_location_cache);
-        file_location_cache = NULL;
-    }
-}
+// // Clean up cache when shutting down
+// void cleanup_cache()
+// {
+//     if (file_location_cache)
+//     {
+//         print_cache_stats(file_location_cache); // Print final statistics
+//         free_cache(file_location_cache);
+//         file_location_cache = NULL;
+//     }
+// }
 
 void *Handle_client_requests(void *arg)
 {
@@ -813,12 +899,12 @@ void free_all()
 
 int main()
 {
-    init_file_location_cache();
+    // init_file_location_cache();
     initialze_storage_server();
     pthread_t client_thread;
     pthread_create(&client_thread, NULL, Handle_client_requests, NULL);
     pthread_join(client_thread, NULL);
-    cleanup_cache();
+    // cleanup_cache();
     free_all();
     return 0;
 }
