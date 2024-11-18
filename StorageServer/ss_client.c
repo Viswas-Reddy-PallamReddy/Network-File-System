@@ -42,7 +42,7 @@ void *handle_client_thread(void *arg) {
 
         printf("Client connected.\n");
         handle_client(client_socket);
-        close(client_socket);
+        // close(client_socket);
         printf("Client disconnected.\n");
     }
 
@@ -62,19 +62,28 @@ void handle_client(int client_socket) {
     char* filename = strtok(NULL, " ");
     if (strcmp(command, "READ") == 0) {
         read_file(client_socket, filename);
+        close(client_socket);
     }
     else if (strcmp(command, "GET_INFO") == 0) {
         send_file_info(client_socket, filename);
+        close(client_socket);
     } else if (strcmp(command, "STREAM") == 0) {
         printf("Streaming audio... %s\n",command);
         stream_audio(client_socket, filename);
+        close(client_socket);
     } else if (strcmp(command, "WRITE") == 0) {
-        write_to_file(client_socket, filename);
+        char* token = strtok(NULL, " ");
+        int is_sync = 0;
+        if(token != NULL && strcmp(token, "--SYNC") == 0){
+            is_sync =1;
+        }
+        write_to_file(client_socket, filename, is_sync);
     } else if (strcmp(command, "EXIT") == 0) {
         close(client_socket);
     }
     else {
         send(client_socket, "Invalid command\n", 16, 0);
+        close(client_socket);
     }
 }
 
@@ -122,7 +131,7 @@ void read_file(int client_socket, const char *filename) {
     fclose(file);
 }
 
-void write_to_file(int client_socket, const char *filename) {
+void write_to_file(int client_socket, const char *filename,int is_sync,int nm_socket){
     packet pkt;
     FILE *file = fopen(filename, "r");
     if (!file) {
@@ -145,16 +154,36 @@ void write_to_file(int client_socket, const char *filename) {
     strcpy(pkt.data, "Enter text to write to the file (type $STOP to end):\n");
     pkt.seq_num = 1;
     send(client_socket, &pkt, sizeof(pkt), 0);
-    int bytes_received;
-    while ((bytes_received = recv(client_socket, &pkt, sizeof(pkt), 0)) > 0) {
-        if (bytes_received == sizeof(pkt) && pkt.seq_num != -1) {
-            printf("packet data: %s\n",pkt.data);
-            fwrite(pkt.data, 1, strlen(pkt.data), file);
-        }
-        else if (pkt.seq_num == -1)
+    packet pkt_write[MAX_CHUNK_WRITE];
+    int i=0;
+    for(i=0;i<MAX_CHUNK_WRITE;i++)
+    {
+        memset(&pkt_write[i],0,sizeof(pkt_write[i]));
+        int bytes_received = recv(client_socket, &pkt_write[i], sizeof(pkt_write[i]), 0);
+        if (bytes_received <= 0) break;
+        if(pkt_write[i].seq_num == -1)
             break;
-        memset(&pkt, 0, sizeof(pkt));
     }
+    // send(client_socket,"request has been accepted",strlen("request has been accepted"),0);
+    // if(i+1>THRESHOLD && !is_sync)
+    //     close(client_socket);
+    for(int j=0;j<i;j++)
+    {
+        // printf("%s\n",pkt_write[j].data);
+        fwrite(pkt_write[j].data,1,strlen(pkt_write[j].data),file);
+    }
+
+    // int bytes_received;
+    // while ((bytes_received = recv(client_socket, &pkt, sizeof(pkt), 0)) > 0) {
+    //     if (bytes_received == sizeof(pkt) && pkt.seq_num != -1) {
+    //         printf("packet data: %s\n",pkt.data);
+    //         fwrite(pkt.data, 1, strlen(pkt.data), file);
+    //     }
+    //     else if (pkt.seq_num == -1)
+    //         break;
+    //     memset(&pkt, 0, sizeof(pkt));
+    // }
+    // if(i+1<=THRESHOLD || is_sync)
     send(client_socket,"File modified successfully",strlen("File modified successfully"),0);
     fclose(file);
 }

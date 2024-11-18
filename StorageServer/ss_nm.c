@@ -24,7 +24,8 @@ int connect_to_nm(int nm_port,const char* ip_address) {
 }
 
 void initialise_to_nm(int nm_socket,const char* ip_address){
-    
+    send(nm_socket, "SERVER", 6, 0);
+    usleep(5000);
     strcpy(this.ip,ip_address);
     this.nm_port = NM_PORT;
     this.client_port = CLIENT_PORT;
@@ -156,7 +157,7 @@ void handle_nm(int nm_socket, char *nm_command) {
     }
     else if(strcmp(command, "WRITE")==0){
         char* filename = strtok(NULL, " ");
-        write_to_file(nm_socket, filename);
+        write_to_file(nm_socket, filename,1);
     }
     else{
         send(nm_socket, "Invalid command\n", 16, 0);
