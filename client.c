@@ -22,6 +22,7 @@ int NM_PORT;
 void play_audio_stream(int server_socket);
 void handle_nm(char *input,int nm_socket);
 void handle_ss(char *input,char *buff);
+void play_mp3(const char *filename);
 
 int main(int argc,char* argv[])
 {
@@ -104,6 +105,8 @@ void handle_ss(char *input,char *buff)
     char ss_ip[INET_ADDRSTRLEN];
     int ss_port;
     printf("%s\n",buff);
+    if(strncmp("buff","Path not found",15)==0)
+        return;
     sscanf(buff, "%s %d", ss_ip, &ss_port);
     // Connect to storage server
     int ss_socket;
@@ -130,22 +133,30 @@ void handle_ss(char *input,char *buff)
     if(strncmp(input,"READ",4)==0)
     {
         packet pkt;
-        while(1)
-        {   
+        int bytes_received;
+        memset(&pkt,0,sizeof(pkt));
+        bytes_received = recv(ss_socket, &pkt, sizeof(pkt), 0);
+        if (bytes_received > 0)
+        {
+            printf("%s\n", pkt.data);
+        }
+        int total_chunks_q=pkt.total_chunks;
+        printf("Total chunks are %d\n",total_chunks_q);
+        for(int i=1;i<total_chunks_q;i++)
+        {
             memset(&pkt,0,sizeof(pkt));
-            int bytes_received;
-            if((bytes_received = recv(ss_socket, &pkt, sizeof(pkt), 0)) > 0)
+            bytes_received = recv(ss_socket, &pkt, sizeof(pkt), 0);
+            if (bytes_received > 0)
             {
-                if(strncmp(pkt.data,"$STOP",5)==0 || pkt.seq_num==-1)
-                {
-                    break;
-                }
-                printf("%s\n",pkt.data);
+                // printf("\n\nChunk %d\n\n",pkt.seq_num);
+                printf("%s\n", pkt.data);
             }
-            else
-            {
-                break;
-            }
+        }
+
+        bytes_received = recv(ss_socket, &pkt, sizeof(pkt), 0);
+        if (bytes_received > 0)
+        {
+            printf("%s\n", pkt.data);
         }
     }
     else if(strncmp(input,"GET_INFO",8)==0)
@@ -202,28 +213,46 @@ void handle_ss(char *input,char *buff)
 }
 void play_audio_stream(int server_socket)
 {
-    FILE *mpv_pipe;
-    char buffer[BUFFER_SIZE];
-    int bytes_received;
-
-    // Open a pipe to mpv for audio playback
-    mpv_pipe = popen("mpv --no-terminal --quiet -", "w");
-    if (mpv_pipe == NULL)
+    FILE *output_file;
+    packet pkt;
+    int total_a_chunks;
+    // Open a file to save the received audio data
+    output_file = fopen("received_audio.mp3", "wb");
+    if (output_file == NULL)
     {
-        perror("Failed to open mpv pipe");
+        perror("Failed to open file for writing");
         return;
     }
 
-    printf("Streaming audio... Press Ctrl+C to stop.\n");
-
-    // Receive and write audio data to mpv
-    while ((bytes_received = recv(server_socket, buffer, BUFFER_SIZE, 0)) > 0)
+    printf("Receiving and saving audio data to file...\n");
+    int bytes_received;
+    int rev=0;
+    // Receive and write audio data to the file
+    while (1)
     {
-        fwrite(buffer, 1, bytes_received, mpv_pipe);
-        fflush(mpv_pipe);
+        bytes_received = recv(server_socket,&pkt, sizeof(pkt), 0);
+        if(bytes_received <= 0)         
+            break;
+        if(rev==0)
+            total_a_chunks=pkt.total_chunks;
+        rev++;    
+        fwrite(pkt.data, 1, CHUNK_SIZE, output_file);
+        if(rev==total_a_chunks)
+            break;
     }
 
-    // Close the pipe when the stream ends
-    pclose(mpv_pipe);
-    printf("Audio stream ended.\n");
+    fclose(output_file);
+    printf("Audio data saved to 'received_audio.mp3'.\n");
+
+    // Play the saved audio file using mpv
+    printf("Playing audio file...\n");
+    play_mp3("received_audio.mp3");
+    printf("Audio playback finished.\n");
+    // remove("received_audio.mp3");
+}
+
+void play_mp3(const char *filename) {
+    char command[256];
+    snprintf(command, sizeof(command), "mpv --no-terminal --really-quiet %s", filename);
+    system(command);
 }
