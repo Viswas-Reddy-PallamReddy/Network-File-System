@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include "erro_code.h"
 #include <arpa/inet.h>
 #define CHUNK_SIZE 256 // Define the size of each data chunk
 #define MAX_ACCESSIBLE_PATHS 100
@@ -98,7 +99,17 @@ void handle_nm(char *input,int nm_socket)
             close(nm_socket);
             return;
         }
-        printf("Naming Server: %s\n", buffer);
+        if(strncmp(buffer,"ERROR",5)==0)
+        {
+            int error_code;
+            sscanf(buffer, "ERROR %d", &error_code);
+            if(error_code!=0)
+                printf("Naming Server: Error %d : %s\n", error_code,error_message(error_code));
+            else
+                printf("Naming Server: %s\n", error_message(error_code)); 
+        }
+        else
+            printf("Naming Server: \n%s\n", buffer);
     }
     // PENDING CODE FOR CREATE ,DELETE, LIST BY CHECkING NM CODE
     
@@ -107,12 +118,17 @@ void handle_ss(char *input,char *buff,int nm_socket)
 {
     char ss_ip[INET_ADDRSTRLEN];
     int ss_port;
-    printf("%s\n",buff);
-    if(strncmp("buff","Path not found",15)==0)
+    if(strncmp("buff","IP",2)!=0)
+    {
+        int error_code;
+        sscanf(buff, "ERROR %d", &error_code);
+        printf("Error %d : %s\n", error_code,error_message(error_code));
         return;
-    sscanf(buff, "%s %d", ss_ip, &ss_port);
+    }
+    printf("%s\n",buff);
+    sscanf(buff, "IP %s PORT %d", ss_ip, &ss_port);
     // Connect to storage server
-    // ss_port=8080;
+    // ss_port=5837;
     // sprintf(ss_ip, "%s", "10.42.0.89");
     int ss_socket;
     struct sockaddr_in ss_addr;
@@ -158,11 +174,12 @@ void handle_ss(char *input,char *buff,int nm_socket)
             }
         }
 
-        bytes_received = recv(ss_socket, &pkt, sizeof(pkt), 0);
-        if (bytes_received > 0)
-        {
-            printf("%s\n", pkt.data);
-        }
+        int error_c;
+        recv(ss_socket, &error_c, sizeof(error_c), 0);
+        if(error_c==0)
+            printf("%s\n", error_message(error_c));
+        else
+            printf("ERROR %d : %s\n",error_c,error_message(error_c));
     }
     else if(strncmp(input,"GET_INFO",8)==0)
     {
@@ -176,23 +193,24 @@ void handle_ss(char *input,char *buff,int nm_socket)
     }
     else if(strncmp(input,"WRITE",5)==0)
     {
-        packet pkt;
-        int bytes_received = recv(ss_socket, &pkt, sizeof(pkt), 0);
-        if (bytes_received > 0)
+        char buffer[BUFFER_SIZE];
+        recv(ss_socket, buffer, BUFFER_SIZE, 0);
+        if(strncmp(buffer,"ERROR",5)==0)
         {
-            printf("%s\n", pkt.data);
-            if(pkt.seq_num==-1)
-            {
-                goto last;
-            }
+            int error_code;
+            sscanf(buffer,"ERROR %d", &error_code);
+            printf("ERROR %d : %s\n",error_code,error_message(error_code));
+            goto last;
         }
+        else
+            printf("%s\n",buffer);
         packet write_pkt[MAX_CHUNK_WRITE];
         // char data[CHUNK_SIZE];
         int seq_num=0;
         for(int i=0;i<MAX_CHUNK_WRITE;i++)
         {
             // memset(data,0,CHUNK_SIZE);
-            memset(&pkt,0,sizeof(pkt));
+            memset(&write_pkt[i],0,sizeof(write_pkt[i]));
             fgets(write_pkt[i].data, CHUNK_SIZE, stdin);
             if(strncmp(write_pkt[i].data,"$STOP",5)==0)
             {
@@ -211,11 +229,13 @@ void handle_ss(char *input,char *buff,int nm_socket)
             if(write_pkt[i].seq_num==-1)
                 break;
         }
-        char buffer[BUFFER_SIZE];
-        memset(buffer,0,BUFFER_SIZE);
-        recv(ss_socket, buffer, BUFFER_SIZE, 0);
-        printf("%s\n", buffer);
-        
+        // char buffer[BUFFER_SIZE];
+        int error_c;
+        recv(ss_socket, &error_c, sizeof(error_c), 0);
+        if(error_c==0)
+            printf("%s\n", error_message(error_c));
+        else
+            printf("ERROR %d : %s\n",error_c,error_message(error_c));           
     }
     else if(strncmp(input,"STREAM",6)==0)
     {
@@ -226,7 +246,7 @@ void handle_ss(char *input,char *buff,int nm_socket)
 }
 void play_audio_stream(int server_socket)
 {
-    FILE *ffplaypipe=popen("ffplay -autoexit -", "w");
+    FILE *ffplaypipe=popen("ffplay -nodisp -autoexit -", "w");
     if(ffplaypipe==NULL)
     {
         printf("ffplay failed\n");
@@ -261,4 +281,8 @@ void play_audio_stream(int server_socket)
         firstTime=0;
     }
     pclose(ffplaypipe);
+}
+
+void* write_thread(void *arg) {
+    
 }
