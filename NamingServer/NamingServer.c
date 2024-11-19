@@ -97,14 +97,14 @@ void add_storage_server(int accept_status)
         strcpy(new_storage_server.accessible_paths[i], temp_4[i]);
         // printf("Path is : %s\n", new_storage_server.accessible_paths[i]);
     }
-    if (storage_server_count == 0 || storage_server_count == 1)
-    {
-        new_storage_server.Backup_SS = true;
-    }
-    else
-    {
-        new_storage_server.Backup_SS = false;
-    }
+    // if (storage_server_count == 0 || storage_server_count == 1)
+    // {
+    //     new_storage_server.Backup_SS = true;
+    // }
+    // else
+    // {
+    //     new_storage_server.Backup_SS = false;
+    // }
 
     storage_servers[storage_server_count++] = new_storage_server;
 
@@ -606,15 +606,31 @@ int connect_and_send_SS(int SS_number, char *send_message, int accept_status_1)
 
     printf("Received request from storage server: %s\n", temp_b);
     send(accept_status_1, temp_b, strlen(temp_b), 0);
-    if (strcmp(temp_b, "SUCCESS\n") == 0)
+    if (strcmp(temp_b, "ERROR 0") == 0)
     {
         printf("SENT request to client\n");
         return 1;
     }
+    else if(strcmp(temp_b, "ERROR 6") == 0)
+    {
+        printf("ERROR 6 from server\n");
+        return 0;
+    }
+    else if(strcmp(temp_b, "ERROR 7") == 0)
+    {
+        printf("ERROR 7 from server\n");
+        return 0;
+    }
+    else if(strcmp(temp_b,"ERROR 5") == 0)
+    {
+        printf("ERROR 5 from server\n");
+        return 0;
+    }
     else
     {
-        printf("ERROR in sending request to client\n");
+        printf("ERROR from server_Else wala\n");
         return 0;
+
     }
     // close(server_socket);
 }
@@ -649,7 +665,7 @@ void *process_client_requests(void *accept_status)
 
         if (is_file_path_being_written(file_path))
         {
-            send(accept_status_1, "File already being written\n", strlen("File already being written\n"), 0);
+            send(accept_status_1, "ERROR 4\n", strlen("ERROR 4\n"), 0);
             return NULL;
         }
 
@@ -660,7 +676,7 @@ void *process_client_requests(void *accept_status)
         }
         else
         {
-            send(accept_status_1, "Path not found\n", strlen("Path not found\n"), 0);
+            send(accept_status_1, "ERROR 2\n", strlen("ERROR 2\n"), 0);
         }
     }
     else if (strncmp(buffer, "WRITE", 5) == 0)
@@ -669,7 +685,7 @@ void *process_client_requests(void *accept_status)
 
         if (is_file_path_being_written(file_path))
         {
-            send(accept_status_1, "File already being written\n", strlen("File already being written\n"), 0);
+            send(accept_status_1, "ERROR 4\n", strlen("ERROR 4\n"), 0);
             return NULL;
         }
 
@@ -700,6 +716,7 @@ void *process_client_requests(void *accept_status)
                 perror("Error in connecting to storage server");
                 exit(1);
             }
+            printf("The Connection is established\n");
             char temp_command[1000];
             int bytes_received = recv(server_socket, temp_command, sizeof(temp_command), 0);
             if (bytes_received < 0)
@@ -715,7 +732,7 @@ void *process_client_requests(void *accept_status)
         }
         else
         {
-            send(accept_status_1, "Path not found\n", strlen("Path not found\n"), 0);
+            send(accept_status_1, "ERROR 2\n", strlen("ERROR 2\n"), 0);
         }
     }
     else if (strncmp(buffer, "DELETE", 6) == 0)
@@ -731,7 +748,7 @@ void *process_client_requests(void *accept_status)
         // }
         // else
         // {
-        //     send(accept_status_1, "Path not found\n", strlen("Path not found\n"), 0);
+        //     send(accept_status_1, "ERROR 2\n", strlen("ERROR 2\n"), 0);
         // }
         int ss_number = file_path(buffer + 7);
         if (ss_number != -1)
@@ -755,7 +772,7 @@ void *process_client_requests(void *accept_status)
         }
         else
         {
-            send(accept_status_1, "Path not found\n", strlen("Path not found\n"), 0);
+            send(accept_status_1, "ERROR 2\n", strlen("ERROR 2\n"), 0);
         }
     }
     else if (strncmp(buffer, "CREATE", 6) == 0)
@@ -781,8 +798,17 @@ void *process_client_requests(void *accept_status)
             strcat(temp_path_store, "/");
             strcat(temp_path_store, tokens[2]);
             printf("insert file is %s\n", temp_path_store);
+            StorageServer * temp_r = find_storage_server(trie_root, temp_path_store);
+          
+            if(temp_r != NULL)
+            {
+                printf("File already exists\n");
+                send(accept_status_1, "ERROR 5\n", strlen("ERROR 5\n"), 0);
+                return NULL;
+            }
+            
             insert_path(trie_root, temp_path_store, &storage_servers[ss_number]); //// not happening properly
-            cache_put(file_location_cache, tokens[1], ss_number);
+            // cache_put(file_location_cache, tokens[1], ss_number);
             cache_put(file_location_cache, temp_path_store, ss_number);
 
             // send(storage_servers[ss_number].file_descriptor, buffer, strlen(buffer), 0);
@@ -806,7 +832,7 @@ void *process_client_requests(void *accept_status)
         else
         {
             printf("Storage server not found\n");
-            send(accept_status_1, "Path not found\n", strlen("Path not found\n"), 0);
+            send(accept_status_1, "ERROR 2\n", strlen("ERROR 2\n"), 0);
         }
     }
     else if (strncmp(buffer, "COPY", 4) == 0)
@@ -919,7 +945,7 @@ void *process_client_requests(void *accept_status)
         else
         {
             printf("Storage server not found\n");
-            send(accept_status_1, "Path not found\n", strlen("Path not found\n"), 0);
+            send(accept_status_1, "ERROR 2\n", strlen("ERROR 2\n"), 0);
         }
     }
     else if (strncmp(buffer, "LIST", 4) == 0)
@@ -935,7 +961,7 @@ void *process_client_requests(void *accept_status)
         }
         else
         {
-            send(accept_status_1, "Path not found\n", strlen("Path not found\n"), 0);
+            send(accept_status_1, "ERROR 2\n", strlen("ERROR 2\n"), 0);
         }
     }
     else if (strncmp(buffer, "STREAM", 6) == 0)
@@ -947,7 +973,7 @@ void *process_client_requests(void *accept_status)
         }
         else
         {
-            send(accept_status_1, "Path not found\n", strlen("Path not found\n"), 0);
+            send(accept_status_1, "ERROR 2\n", strlen("ERROR 2\n"), 0);
         }
     }
     else if (strncmp(buffer, "SERVER", 6) == 0)
@@ -957,7 +983,14 @@ void *process_client_requests(void *accept_status)
     else
     {
         printf("Invalid request\n");
-        send(accept_status_1, "Invalid request\n", strlen("Invalid request\n"), 0);
+        send(accept_status_1, "ERROR 1\n", strlen("ERROR 1\n"), 0);
+        // char temp_req[50];
+        // strcpy(temp_req, "ERROR ");
+        // int IR =1;
+        // char temp_req_1[50];
+        // sprintf(temp_req_1, "%d", IR);
+        // strcat(temp_req, temp_req_1);
+        // send(accept_status_1, temp_req, strlen(temp_req), 0);
     }
 
     // Other cases remain the same...
@@ -1066,58 +1099,60 @@ void init_log_print()
     sa.sa_flags = SA_RESTART;
     sigaction(SIGTSTP, &sa, NULL);
 }
-int ping_server(const char *ip, int port)
-{
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock < 0)
-    {
-        return 0; // Socket creation failed
-    }
+// int ping_server(const char *ip, int port)
+// {
+//     int sock = socket(AF_INET, SOCK_STREAM, 0);
+//     if (sock < 0)
+//     {
+//         return 0; // Socket creation failed
+//     }
 
-    // Set socket timeout to 2 seconds
-    struct timeval timeout;
-    timeout.tv_sec = 2;
-    timeout.tv_usec = 0;
-    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+//     // // Set socket timeout to 2 seconds
+//     // struct timeval timeout;
+//     // timeout.tv_sec = 2;
+//     // timeout.tv_usec = 0;
+//     // setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+//     // setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
 
-    // Set up server address
-    struct sockaddr_in server_addr;
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(port);
-    inet_pton(AF_INET, ip, &server_addr.sin_addr);
+//     // Set up server address
+//     struct sockaddr_in server_addr;
+//     memset(&server_addr, 0, sizeof(server_addr));
+//     server_addr.sin_family = AF_INET;
+//     server_addr.sin_port = htons(port);
+//     inet_pton(AF_INET, ip, &server_addr.sin_addr);
 
-    // Try to connect
-    int result = connect(sock, (struct sockaddr *)&server_addr, sizeof(server_addr));
-    close(sock);
+//     // Try to connect
+//     int result = connect(sock, (struct sockaddr *)&server_addr, sizeof(server_addr));
+//     close(sock);
 
-    return (result >= 0); // Return 1 if connected, 0 if failed
-}
+//     return (result >= 0); // Return 1 if connected, 0 if failed
+// }
 
-void *Server_Status(void *arg)
-{
-    while (1)
-    {
-        for (int i = 0; i < storage_server_count; i++)
-        {
-            if (!ping_server(storage_servers[i].ip, storage_servers[i].server_port))
-            {
-                printf("Storage server %d is down\n", i);
-                // Remove the server from the trie
-                // remove_storage_server(trie_root, i);
-            }
-        }
-    }
-}
+// void *Server_Status(void *arg)
+// {
+
+//     while (1)
+//     {
+//         for (int i = 0; i < storage_server_count; i++)
+//         {
+//             if (!ping_server(storage_servers[i].ip, storage_servers[i].server_port))
+//             {
+//                 printf("Storage server %d is down\n", i);
+//                 return NULL;
+//                 // Remove the server from the trie
+//                 // remove_storage_server(trie_root, i);
+//             }
+//         }
+//     }
+// }
 
 int main()
 {
     init_log_print();
     init_file_location_cache();
     initialze_storage_server();
-    pthread_t server_active_thread;
-    pthread_create(&server_active_thread, NULL, Server_Status, NULL);
+    // pthread_t server_active_thread;
+    // pthread_create(&server_active_thread, NULL, Server_Status, NULL);
     pthread_t client_thread;
     pthread_create(&client_thread, NULL, Handle_client_requests, NULL);
     pthread_join(client_thread, NULL);
