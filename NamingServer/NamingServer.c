@@ -72,7 +72,7 @@ void add_storage_server(int accept_status)
     {
         if(storage_servers[i].server_port == te_port)
         {
-            printf("Storage server coming back online\n");
+            printf("\033[0;32mStorage server coming back online\n\033[0m");
             storage_servers[i].server_down = false;
             /// need to call a function 
         }
