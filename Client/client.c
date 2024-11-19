@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include "erro_code.h"
 #include <arpa/inet.h>
 #define CHUNK_SIZE 256 // Define the size of each data chunk
@@ -27,6 +28,7 @@ void play_audio_stream(int server_socket);
 void handle_nm(char *input,int nm_socket);
 void handle_ss(char *input,char *buff,int nm_socket);
 void play_mp3(const char *filename);
+void *write_thread(void *arg);
 
 int main(int argc,char* argv[])
 {
@@ -224,19 +226,34 @@ void handle_ss(char *input,char *buff,int nm_socket)
             seq_num++;
             // send(ss_socket, &pkt, sizeof(pkt), 0);
         }
+        printf("Sending %d packets\n",seq_num);
         for(int i=0;i<MAX_CHUNK_WRITE;i++)
         {
+            // printf("Sending packet: %s\n",write_pkt[i].data);
             send(ss_socket, &write_pkt[i], sizeof(write_pkt[i]), 0);
             if(write_pkt[i].seq_num==-1)
                 break;
         }
         // char buffer[BUFFER_SIZE];
-        int error_c;
-        recv(ss_socket, &error_c, sizeof(error_c), 0);
-        if(error_c==0)
-            printf("%s\n", error_message(error_c));
+        char buffer2[BUFFER_SIZE];
+        int bytes_received = recv(ss_socket, buffer2, BUFFER_SIZE, 0);
+        if (bytes_received > 0)
+            buffer2[bytes_received] = '\0';
+        if(strncmp(buffer2,"request has been accepted",25)==0)
+        {
+            printf("request has been accepted\n");
+            pthread_t thread_id;
+            pthread_create(&thread_id, NULL, write_thread, &ss_socket);
+        }
         else
-            printf("ERROR %d : %s\n",error_c,error_message(error_c));           
+        {
+            int error_code;
+            sscanf(buffer2,"ERROR %d", &error_code);
+            if(error_code==0)
+                printf("%s\n", error_message(error_code));
+            else    
+                printf("ERROR %d : %s\n",error_code,error_message(error_code));
+        }
     }
     else if(strncmp(input,"STREAM",6)==0)
     {
@@ -285,5 +302,14 @@ void play_audio_stream(int server_socket)
 }
 
 void* write_thread(void *arg) {
-
+    // printf("Thread started\n");
+    int ss_socket = *(int *)arg;
+    int code;
+    recv(ss_socket, &code, sizeof(code), 0);
+    if(code==0)
+        printf("%s\n", error_message(code));
+    else
+        printf("ERROR %d : %s\n",code,error_message(code));   
+    close(ss_socket);     
+    pthread_exit(NULL);
 }
