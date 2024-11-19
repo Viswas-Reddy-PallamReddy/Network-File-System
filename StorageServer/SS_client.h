@@ -3,7 +3,7 @@
 
 #include "headers.h"
 
-#define CLIENT_PORT 8080
+#define CLIENT_PORT 5323
 #define MAX_CHUNK_WRITE 40
 #define THRESHOLD 10
 
@@ -14,8 +14,10 @@ void handle_client(int client_socket);
 void read_file(int client_socket, const char *filename);
 void send_file_info(int client_socket, const char *filename);
 void stream_audio(int client_socket, const char *filename);
-void write_to_file(int client_socket, const char *filename,int is_sync,int nm_socket);
-void handle_client(int client_socket);
+void write_to_file(int client_socket, const char *filename,int is_sync);
+// void traverse_directory1(const char* dirname,const char* base,char* temp,int* num_accessible_paths);
+// void print_paths();
+
 
 
 
