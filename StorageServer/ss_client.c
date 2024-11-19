@@ -1,5 +1,6 @@
 #include "headers.h"
 #include "SS_client.h"
+
 void *handle_client_thread(void *arg) {
     int server_socket, client_socket;
     struct sockaddr_in server_addr, client_addr;
@@ -58,9 +59,7 @@ void handle_client(int client_socket) {
     buffer[bytes_received] = '\0';
     printf("Received command: %s\n", buffer);
     char* command = strtok(buffer, " ");
-    char* temp = strtok(NULL, " ");
-    char filename[MAX_PATH_LEN];
-    snprintf(filename, sizeof(filename), "Paths/%s", temp);
+    char* filename = strtok(NULL, " ");
     if (strcmp(command, "READ") == 0) {
         read_file(client_socket, filename);
         close(client_socket);
@@ -82,29 +81,22 @@ void handle_client(int client_socket) {
     } else if (strcmp(command, "EXIT") == 0) {
         close(client_socket);
     }
-    // else if(strcmp(command, "LIST") == 0){
-    //     print_paths();
-    // }
     else {
-        // send(client_socket, "Invalid command\n", 16, 0);
-        int code = 1;
-        send(final_nm_socket, &code, sizeof(int), 0);
+        send(client_socket, "Invalid command\n", 16, 0);
         close(client_socket);
     }
 }
 
 void read_file(int client_socket, const char *filename) {
-    printf("Reading file: %s\n", filename);
     FILE *file = fopen(filename, "r");
-    // if (!file) {
-    //     packet pkt;
-    //     pkt.seq_num = -1;
-    //     pkt.total_chunks = 1;
-    //     strcpy(pkt.data, "File not found\n");
-    //     send(client_socket, pkt.data, strlen(pkt.data), 0);
-    //     // send(client_socket, &pkt, sizeof(pkt), 0);
-    //     return;
-    // }
+    if (!file) {
+        packet pkt;
+        pkt.seq_num = -1;
+        pkt.total_chunks = 1;
+        strcpy(pkt.data, "File not found\n");
+        send(client_socket, &pkt, sizeof(pkt), 0);
+        return;
+    }
 
     // Get file size
     fseek(file, 0, SEEK_END);
@@ -134,39 +126,34 @@ void read_file(int client_socket, const char *filename) {
     char* message = "File sent successfully\n";
     // memset(pkt.data, 0, CHUNK_SIZE);
     strcpy(pkt.data, message);
-    // send(client_socket, &pkt, sizeof(pkt), 0);
-    int code = 0;
-    send(client_socket, &code, sizeof(int), 0);
+    send(client_socket, &pkt, sizeof(pkt), 0);
     printf("file size: %ld\n", file_size);
     fclose(file);
 }
 
-void write_to_file(int client_socket, const char *filename,int is_sync) {
+void write_to_file(int client_socket, const char *filename,int is_sync,int nm_socket){
     packet pkt;
     FILE *file = fopen(filename, "r");
     if (!file) {
         memset(&pkt, 0, sizeof(pkt));
-        strcpy(pkt.data, "ERROR 16\n");
+        strcpy(pkt.data, "File not found\n");
         pkt.seq_num = -1;
-    //     send(client_socket, &pkt, sizeof(pkt), 0);
-        send(client_socket, pkt.data, strlen(pkt.data), 0);
+        send(client_socket, &pkt, sizeof(pkt), 0);
         return;
     }
     fclose(file);
     file = fopen(filename, "a");
     if (!file) {
         memset(&pkt, 0, sizeof(pkt));
-        strcpy(pkt.data, "ERROR 9\n");
+        strcpy(pkt.data, "Error writing to file\n");
         pkt.seq_num = -1;
-        // send(client_socket, &pkt, sizeof(pkt), 0);
-        send(client_socket, pkt.data, strlen(pkt.data), 0);
+        send(client_socket, &pkt, sizeof(pkt), 0);
         return;
     }
     memset(&pkt, 0, sizeof(pkt));
     strcpy(pkt.data, "Enter text to write to the file (type $STOP to end):\n");
     pkt.seq_num = 1;
-    // send(client_socket, &pkt, sizeof(pkt), 0);
-    send(client_socket, pkt.data, strlen(pkt.data), 0);
+    send(client_socket, &pkt, sizeof(pkt), 0);
     packet pkt_write[MAX_CHUNK_WRITE];
     int i=0;
     for(i=0;i<MAX_CHUNK_WRITE;i++)
@@ -177,12 +164,9 @@ void write_to_file(int client_socket, const char *filename,int is_sync) {
         if(pkt_write[i].seq_num == -1)
             break;
     }
+    // send(client_socket,"request has been accepted",strlen("request has been accepted"),0);
     // if(i+1>THRESHOLD && !is_sync)
-    // {
-    //     send(nm_socket,"request has been accepted",strlen("request has been accepted"),0);
-    //     send(client_socket,"request has been accepted",strlen("request has been accepted"),0);
     //     close(client_socket);
-    // }
     for(int j=0;j<i;j++)
     {
         // printf("%s\n",pkt_write[j].data);
@@ -200,21 +184,14 @@ void write_to_file(int client_socket, const char *filename,int is_sync) {
     //     memset(&pkt, 0, sizeof(pkt));
     // }
     // if(i+1<=THRESHOLD || is_sync)
-    int code = 0;
-    send(client_socket,&code, sizeof(int), 0);
-    send(final_nm_socket,"ERROR 0", 10, 0);
-
-    // send(nm_socket,"File modified successfully",strlen("File modified successfully"),0);
-    // send(client_socket,"File modified successfully",strlen("File modified successfully"),0);
+    send(client_socket,"File modified successfully",strlen("File modified successfully"),0);
     fclose(file);
 }
 
 void send_file_info(int client_socket, const char *filename) {
     struct stat file_stat;
     if (stat(filename, &file_stat) < 0) {
-        // send(client_socket, "File not found\n", 15, 0);
-        int code = 16;
-        send(client_socket, &code, sizeof(int), 0);
+        send(client_socket, "File not found\n", 15, 0);
         return;
     }
     char permissions[11];
@@ -242,11 +219,9 @@ void send_file_info(int client_socket, const char *filename) {
 
 void stream_audio(int client_socket, const char *filename) {
     int fd = open(filename,O_RDONLY);
-    // if(fd < 0){
-    //     // printf("Couldnt open file\n");
-    //     int code = 10;
-    //     send(client_socket, &code, sizeof(int), 0);
-    // }
+    if(fd < 0){
+        printf("Couldnt open file\n");
+    }
     int buffer_size = 256;
     char buffer[buffer_size];
     ssize_t bytes_read;
@@ -266,66 +241,3 @@ void stream_audio(int client_socket, const char *filename) {
 
     return;
 }
-
-// void traverse_directory1(const char* dirname,const char* base,char* temp,int* num_accessible_paths){
-//     DIR *dir;
-//     struct dirent *ent;
-//     struct stat st;
-
-//     // Open the directory
-//     if ((dir = opendir(dirname)) != NULL) {
-//         while ((ent = readdir(dir)) != NULL) {
-//             if (ent->d_name[0] == '.') {
-//                 continue;  // Skip hidden files and directories (e.g., "." and "..")
-//             }
-
-//             char full_path[1024];
-            
-//             snprintf(full_path, sizeof(full_path), "%s/%s", dirname, ent->d_name);
-
-//             // Get the file status
-//             if (stat(full_path, &st) == 0) {
-//                 char relative_path[1024];
-
-//                 // Calculate the relative path
-//                 if (strcmp(base, ".") == 0) {
-//                     snprintf(relative_path, sizeof(relative_path), "%s", ent->d_name);
-//                 } else {
-//                     snprintf(relative_path, sizeof(relative_path), "./%s", full_path + strlen(base) + 1);
-//                 }
-
-//                 // Recursive call for subdirectories
-//                 if (S_ISDIR(st.st_mode)) {
-//                     strcat(relative_path, " folder");
-//                     traverse_directory1(full_path, base,temp,num_accessible_paths);
-//                 }
-//                 else{
-//                     strcat(relative_path, " file");
-//                 }
-//                 // strcpy(this.accessible_paths[this.num_accessible_paths], relative_path);
-//                 strcat(temp,relative_path);
- 
-//                     strcat(temp,"\n");
-//                 (*num_accessible_paths)++;
-//                 // this.num_accessible_paths++;
-//             }
-//         }
-//         closedir(dir);
-//     } else {
-//         perror("Error reading directory");
-//     }
-// }
-
-// void print_paths() {
-//     char base[1024];
-//     getcwd(base, sizeof(base));
-//     printf("base dir: %s\n",base);
-//     strcat(base,"/Paths");
-//     int num_accessible_paths = 0;
-//     char temp[MAX_PATH_LEN*100];
-//     traverse_directory1(base, base,temp,&num_accessible_paths);
-//     printf("num_accessible_paths: %d\n",num_accessible_paths);
-//     // for(int i = 0; i < num_accessible_paths; i++){
-//         printf("%s\n",temp);
-//     // }
-// }

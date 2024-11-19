@@ -5,27 +5,23 @@
 StorageServer this;
 pthread_t nm_thread;
 pthread_t client_thread;
-int final_nm_socket;
+int nm_socket;
 
 int main(int argc, char *argv[]) {
     if (argc < 3) {
-        fprintf(stderr, "123 Usage: %s <NM_IP> %s <NM_PORT>\n", argv[0],argv[1]);
+        fprintf(stderr, "Usage: %s <NM_PORT>\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
     int nm_port = atoi(argv[1]);
     const char* ip_address = argv[2];
-    int nm_socket;
     nm_socket = connect_to_nm(nm_port,ip_address);
     if (nm_socket < 0) {
-        fprintf(stderr, "134 : Failed to connect to Naming Server\n");
+        fprintf(stderr, "Failed to connect to Name Manager\n");
         exit(EXIT_FAILURE);
     }
-    const char* my_ip = "10.42.0.90";
-    if(my_ip == NULL) {
-        perror("Failed to get IP address");
-        exit(EXIT_FAILURE);
-    }
+    const char* my_ip = "10.42.0.89";
+
     initialise_to_nm(nm_socket,my_ip);
 
 
