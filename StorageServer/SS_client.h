@@ -3,9 +3,9 @@
 
 #include "headers.h"
 
-#define CLIENT_PORT 5323
+#define CLIENT_PORT 7223
 #define MAX_CHUNK_WRITE 40
-#define THRESHOLD 10
+#define THRESHOLD 5
 
 
 // void connect_to_client();

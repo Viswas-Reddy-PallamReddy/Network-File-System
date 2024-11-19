@@ -1,7 +1,9 @@
 #include "headers.h"
 #include "SS_NM.h"
 
-#define NM_PORT 5642
+#define NM_PORT 5232
+
+
 
 int connect_to_nm(int nm_port,const char* ip_address) {
     int nm_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -106,7 +108,7 @@ void *process_requests(void *arg) {
         }
         printf("Received command:%s\n",buffer);
         buffer[bytes_received] = '\0';
-        if(strcmp(buffer,"exit")==0){
+        if(strcmp(buffer,"EXIT")==0){
             printf("Received 'exit' command from NM. Shutting down NM thread...\n");
             break;
         }
@@ -120,7 +122,7 @@ void *process_requests(void *arg) {
 }
 
 void handle_nm(char *nm_command) {
-    printf("Received command from nm: %s\n", nm_command);
+    // printf("Received command from nm: %s\n", nm_command);
     char* command = strtok(nm_command, " ");
     printf("command: %s\n",command);
     if(strcmp(command, "CREATE")==0){

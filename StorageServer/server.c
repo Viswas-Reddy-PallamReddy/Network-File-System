@@ -21,7 +21,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "134 : Failed to connect to Naming Server\n");
         exit(EXIT_FAILURE);
     }
-    const char* my_ip = "10.42.0.90";
+    const char* my_ip = "10.42.0.89";
 
     initialise_to_nm(nm_socket,my_ip);
 

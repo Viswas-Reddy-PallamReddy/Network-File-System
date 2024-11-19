@@ -178,25 +178,28 @@ void write_to_file(int client_socket, const char *filename,int is_sync) {
         memset(&pkt_write[i],0,sizeof(pkt_write[i]));
         int bytes_received = recv(client_socket, &pkt_write[i], sizeof(pkt_write[i]), 0);
         if (bytes_received <= 0) break;
+        printf("Received packet with data: %s\n",pkt_write[i].data);
         if(pkt_write[i].seq_num == -1)
             break;
     }
-    // if(i+1>THRESHOLD && !is_sync)
-    // {
-    //     send(nm_socket,"request has been accepted",strlen("request has been accepted"),0);
-    //     send(client_socket,"request has been accepted",strlen("request has been accepted"),0);
-    //     close(client_socket);
-    // }
+    if(i+1>THRESHOLD && !is_sync)
+    {
+        // send(final_nm_socket,"request has been accepted",strlen("request has been accepted"),0);
+        send(client_socket,"request has been accepted",strlen("request has been accepted"),0);
+        close(client_socket);
+    }
     printf("All packets received\n");
     for(int j=0;j<i;j++)
     {
+        
         fwrite(pkt_write[j].data,1,strlen(pkt_write[j].data),file);
     }
 
     int code = 0;
     printf("File modified successfully\n");
-    send(client_socket,&code, sizeof(int), 0);
+    // send(client_socket,&code, sizeof(int), 0);
     send(final_nm_socket,"ERROR 0", 10, 0);
+    send(client_socket,"ERROR 0", 10, 0);
 
     fclose(file);
 }
