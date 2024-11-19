@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <ifaddrs.h>
 #include <arpa/inet.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -17,6 +18,7 @@
 #include <errno.h>
 #include <netinet/tcp.h>
 
+extern int final_nm_socket;
 
 #define CHUNK_SIZE 256
 #define BUFFER_SIZE 4096
