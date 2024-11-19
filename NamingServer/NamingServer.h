@@ -20,10 +20,10 @@
 #define BUFFER_SIZE 5000
 #define MAX_STORAGE_SERVERS 20
 #define MAX_CLIENTS 200
-#define NM_PORT 3388
+#define NM_PORT 3396
 #define MAX_FILES_PER_STORAGE_SERVER 100
 #define MAX_ACCESSIBLE_PATHS 100
-#define INITIAL_STORAGE_SERVERS 4 ///// 2 for backup SS and 2 for primary SS
+#define INITIAL_STORAGE_SERVERS 1 ///// 2 for backup SS and 2 for primary SS
 #define MAX_FILE_NAME_SIZE 4096
 #define MAX_PATH_LENGTH_1 4096
 #define INITIAL_CASHE_SIZE 10

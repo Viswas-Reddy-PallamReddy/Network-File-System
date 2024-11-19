@@ -892,7 +892,7 @@ void *process_client_requests(void *accept_status)
                 perror("Error in receiving data from storage server");
                 exit(1);
             }
-            // printf("Received request from storage server: %s\n", packet_1.data);
+            printf("Received request ( packet ) from storage server: %s\n", packet_1.data);
             packet pkt[packet_1.total_chunks - 1];
 
             for (int i = 0; i < packet_1.total_chunks - 1; i++)
@@ -905,6 +905,9 @@ void *process_client_requests(void *accept_status)
                 }
             }
 
+            int code;
+            recv(server_socket, &code, sizeof(int), 0);
+            printf("Received request (code ) from storage server: %d\n", code);
             char temp_command_2[1000];
             strcpy(temp_command_2, "WRITE ");
             strcat(temp_command_2, tokens[1]);
@@ -919,12 +922,12 @@ void *process_client_requests(void *accept_status)
                 perror("Error in receiving data from storage server");
                 exit(1);
             }
-            recv_temp = recv(server_socket, &temp_pkt, sizeof(packet), 0);
-            if (recv_temp < 0)
-            {
-                perror("Error in receiving data from storage server");
-                exit(1);
-            }
+            // recv_temp = recv(server_socket, &temp_pkt, sizeof(packet), 0);
+            // if (recv_temp < 0)
+            // {
+            //     perror("Error in receiving data from storage server");
+            //     exit(1);
+            // }
             printf("Received request from storage server: %s\n", temp_pkt.data);
             // printf("Received request from storage server: %s\n", etmp);
             printf("Packet 1 is : %s\n", packet_1.data);
@@ -937,6 +940,8 @@ void *process_client_requests(void *accept_status)
             }
             temp_pkt.seq_num = -1;
             send(server_socket, &temp_pkt, sizeof(packet), 0);
+            int code_1 = 0;
+            recv(server_socket, &code_1, sizeof(int), 0);
             char bufr[1000];
             recv(server_socket, bufr, sizeof(bufr) - 1, 0);
             printf("Received request from storage server: %s\n", bufr);
