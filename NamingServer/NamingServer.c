@@ -8,6 +8,10 @@ StorageServer storage_servers[MAX_STORAGE_SERVERS];
 TrieNode *trie_root = NULL;
 int storage_server_count = 0;
 
+int clients_File_Descriptors[MAX_CLIENTS];
+int client_count = 0;
+
+
 void tokenize(char *str, char *delim, char *tokens[])
 {
     char *token = strtok(str, delim);
@@ -63,6 +67,18 @@ void add_storage_server(int accept_status)
 
     char *temp_3[MAX_FILE_NAME_SIZE];
     tokenize(temp_1, " ", temp_3);
+    int te_port = atoi(temp_3[1]);
+    for(int i=0;i<storage_server_count;i++)
+    {
+        if(storage_servers[i].server_port == te_port)
+        {
+            printf("Storage server coming back online\n");
+            storage_servers[i].server_down = false;
+            /// need to call a function 
+        }
+    }
+
+
     strcpy(new_storage_server.ip, temp_3[0]);
     new_storage_server.server_port = atoi(temp_3[1]);
     new_storage_server.client_port = atoi(temp_3[2]);
@@ -115,28 +131,29 @@ void add_storage_server(int accept_status)
 
     // Add the accessible paths to the trie
     for (int i = 0; i < new_storage_server.num_accessible_paths; i++)
-    {  int open_status = open("Log.txt", O_WRONLY | O_APPEND | O_CREAT, 0644);
-    if (open_status < 0)
     {
-        perror("Error in opening file");
-        exit(1);
-    }
-    write(open_status, "Received storage server details\n", strlen("Received storage server details\n"));
-    write(open_status, "Registered new storage server: ", strlen("Registered new storage server: "));
-    write(open_status, new_storage_server.ip, strlen(new_storage_server.ip));
-    write(open_status, "\n", strlen("\n"));
-    write(open_status, "Registered storage server Port for client : ", strlen("Registered storage server Port for client : "));
-    char client_port[10];
-    sprintf(client_port, "%d", new_storage_server.client_port);
-    write(open_status, client_port, strlen(client_port));
-    write(open_status, "\n", strlen("\n"));
-    write(open_status, "Registered storage server Port for NM : ", strlen("Registered storage server Port for NM : "));
-    char server_port[10];
-    sprintf(server_port, "%d", new_storage_server.server_port);
-    write(open_status, server_port, strlen(server_port));
-    write(open_status, "\n", strlen("\n"));
-    write(open_status, "\n", strlen("\n"));
-    close(open_status);
+        int open_status = open("Log.txt", O_WRONLY | O_APPEND | O_CREAT, 0644);
+        if (open_status < 0)
+        {
+            perror("Error in opening file");
+            exit(1);
+        }
+        write(open_status, "Received storage server details\n", strlen("Received storage server details\n"));
+        write(open_status, "Registered new storage server: ", strlen("Registered new storage server: "));
+        write(open_status, new_storage_server.ip, strlen(new_storage_server.ip));
+        write(open_status, "\n", strlen("\n"));
+        write(open_status, "Registered storage server Port for client : ", strlen("Registered storage server Port for client : "));
+        char client_port[10];
+        sprintf(client_port, "%d", new_storage_server.client_port);
+        write(open_status, client_port, strlen(client_port));
+        write(open_status, "\n", strlen("\n"));
+        write(open_status, "Registered storage server Port for NM : ", strlen("Registered storage server Port for NM : "));
+        char server_port[10];
+        sprintf(server_port, "%d", new_storage_server.server_port);
+        write(open_status, server_port, strlen(server_port));
+        write(open_status, "\n", strlen("\n"));
+        write(open_status, "\n", strlen("\n"));
+        close(open_status);
         insert_path(trie_root, new_storage_server.accessible_paths[i], &storage_servers[storage_server_count - 1]);
     }
 
@@ -161,7 +178,7 @@ void initialze_storage_server()
         perror("Error in binding naming server socket");
         exit(1);
     }
-    int listen_status = listen(nm_server_socket, MAX_STORAGE_SERVERS);
+    int listen_status = listen(nm_server_socket, MAX_CLIENTS);
     if (listen_status < 0)
     {
         perror("Error in listening to naming server socket");
@@ -611,17 +628,17 @@ int connect_and_send_SS(int SS_number, char *send_message, int accept_status_1)
         printf("SENT request to client\n");
         return 1;
     }
-    else if(strcmp(temp_b, "ERROR 6") == 0)
+    else if (strcmp(temp_b, "ERROR 6") == 0)
     {
         printf("ERROR 6 from server\n");
         return 0;
     }
-    else if(strcmp(temp_b, "ERROR 7") == 0)
+    else if (strcmp(temp_b, "ERROR 7") == 0)
     {
         printf("ERROR 7 from server\n");
         return 0;
     }
-    else if(strcmp(temp_b,"ERROR 5") == 0)
+    else if (strcmp(temp_b, "ERROR 5") == 0)
     {
         printf("ERROR 5 from server\n");
         return 0;
@@ -630,7 +647,6 @@ int connect_and_send_SS(int SS_number, char *send_message, int accept_status_1)
     {
         printf("ERROR from server_Else wala\n");
         return 0;
-
     }
     // close(server_socket);
 }
@@ -737,19 +753,7 @@ void *process_client_requests(void *accept_status)
     }
     else if (strncmp(buffer, "DELETE", 6) == 0)
     {
-        // const char *filepath = buffer + 7;
-        // int ss_number = get_storage_server_with_cache(filepath);
-        // if (ss_number != -1)
-        // {
-        //     // Remove from both trie and cache
-        //     delete_path(trie_root, filepath);
-        //     hashmap_remove(file_location_cache->map, filepath);
-        //     connect_and_send_SS(ss_number, buffer, accept_status_1);
-        // }
-        // else
-        // {
-        //     send(accept_status_1, "ERROR 2\n", strlen("ERROR 2\n"), 0);
-        // }
+
         int ss_number = file_path(buffer + 7);
         if (ss_number != -1)
         {
@@ -787,9 +791,6 @@ void *process_client_requests(void *accept_status)
         }
 
         int ss_number = get_storage_server_with_cache(tokens[1]);
-        // Add to both trie and cache
-        // insert_path(trie_root, tokens[0], &storage_servers[ss_number]);
-        // cache_put(file_location_cache, tokens[0], ss_number);
 
         if (ss_number != -1)
         {
@@ -798,35 +799,19 @@ void *process_client_requests(void *accept_status)
             strcat(temp_path_store, "/");
             strcat(temp_path_store, tokens[2]);
             printf("insert file is %s\n", temp_path_store);
-            StorageServer * temp_r = find_storage_server(trie_root, temp_path_store);
-          
-            if(temp_r != NULL)
+            StorageServer *temp_r = find_storage_server(trie_root, temp_path_store);
+
+            if (temp_r != NULL)
             {
                 printf("File already exists\n");
                 send(accept_status_1, "ERROR 5\n", strlen("ERROR 5\n"), 0);
                 return NULL;
             }
-            
+
             insert_path(trie_root, temp_path_store, &storage_servers[ss_number]); //// not happening properly
             // cache_put(file_location_cache, tokens[1], ss_number);
             cache_put(file_location_cache, temp_path_store, ss_number);
 
-            // send(storage_servers[ss_number].file_descriptor, buffer, strlen(buffer), 0);
-            // char temp_reply[4096];
-
-            // int bytes_received = recv(storage_servers[ss_number].file_descriptor, temp_reply, 50, 0);
-            // // int bytes_received = recv(accept_status_1,temp_reply,sizeof(temp_reply)-1,0);
-            // if (bytes_received < 0)
-            // {
-            //     perror("Error in receiving data from storage server");
-            //     exit(1);
-            // }
-            // temp_reply[bytes_received] = '\0';
-            // printf("Received request from storage server: %s\n", temp_reply);
-            // char temp[] = "ack sent\n";
-            // // send(accept_status_1, temp_reply, strlen(temp_reply), 0);
-            // send(accept_status_1, temp, sizeof(temp) - 1, 0);
-            // printf("SENT request to client\n");
             connect_and_send_SS(ss_number, buffer, accept_status_1);
         }
         else
@@ -846,7 +831,7 @@ void *process_client_requests(void *accept_status)
             printf("Token is : %s\n", tokens[i]);
         }
 
-        int ss_number = get_storage_server_with_cache(tokens[0]);   
+        int ss_number = get_storage_server_with_cache(tokens[0]);
         int ss_number_1 = get_storage_server_with_cache(tokens[1]);
 
         // Update both trie and cache
@@ -892,7 +877,7 @@ void *process_client_requests(void *accept_status)
                 perror("Error in receiving data from storage server");
                 exit(1);
             }
-            printf("Received request ( packet ) from storage server: %s\n", packet_1.data);
+            // printf("Received request from storage server: %s\n", packet_1.data);
             packet pkt[packet_1.total_chunks - 1];
 
             for (int i = 0; i < packet_1.total_chunks - 1; i++)
@@ -905,9 +890,6 @@ void *process_client_requests(void *accept_status)
                 }
             }
 
-            int code;
-            recv(server_socket, &code, sizeof(int), 0);
-            printf("Received request (code ) from storage server: %d\n", code);
             char temp_command_2[1000];
             strcpy(temp_command_2, "WRITE ");
             strcat(temp_command_2, tokens[1]);
@@ -922,12 +904,12 @@ void *process_client_requests(void *accept_status)
                 perror("Error in receiving data from storage server");
                 exit(1);
             }
-            // recv_temp = recv(server_socket, &temp_pkt, sizeof(packet), 0);
-            // if (recv_temp < 0)
-            // {
-            //     perror("Error in receiving data from storage server");
-            //     exit(1);
-            // }
+            recv_temp = recv(server_socket, &temp_pkt, sizeof(packet), 0);
+            if (recv_temp < 0)
+            {
+                perror("Error in receiving data from storage server");
+                exit(1);
+            }
             printf("Received request from storage server: %s\n", temp_pkt.data);
             // printf("Received request from storage server: %s\n", etmp);
             printf("Packet 1 is : %s\n", packet_1.data);
@@ -940,8 +922,6 @@ void *process_client_requests(void *accept_status)
             }
             temp_pkt.seq_num = -1;
             send(server_socket, &temp_pkt, sizeof(packet), 0);
-            int code_1 = 0;
-            recv(server_socket, &code_1, sizeof(int), 0);
             char bufr[1000];
             recv(server_socket, bufr, sizeof(bufr) - 1, 0);
             printf("Received request from storage server: %s\n", bufr);
@@ -989,18 +969,9 @@ void *process_client_requests(void *accept_status)
     {
         printf("Invalid request\n");
         send(accept_status_1, "ERROR 1\n", strlen("ERROR 1\n"), 0);
-        // char temp_req[50];
-        // strcpy(temp_req, "ERROR ");
-        // int IR =1;
-        // char temp_req_1[50];
-        // sprintf(temp_req_1, "%d", IR);
-        // strcat(temp_req, temp_req_1);
-        // send(accept_status_1, temp_req, strlen(temp_req), 0);
     }
-
-    // Other cases remain the same...
     return NULL;
-    close(accept_status_1); //// need to think about this
+    // close(accept_status_1); //// need to think about this
 }
 
 // Clean up cache when shutting down
@@ -1015,29 +986,6 @@ void cleanup_cache()
 }
 void *Handle_client_requests(void *arg)
 {
-    // void(* arg);
-    // struct sockaddr_in client_addr;
-    // socklen_t client_addr_len = sizeof(client_addr);
-    // int client_socket = socket(AF_INET, SOCK_STREAM, 0);
-    // if (client_socket < 0)
-    // {
-    //     perror("Error in creating client socket");
-    //     exit(1);
-    // }
-    // client_addr.sin_family = AF_INET;
-    // client_addr.sin_port = htons(CLIENT_PORT);
-    // client_addr.sin_addr.s_addr = INADDR_ANY;
-    // if (bind(client_socket, (struct sockaddr *)&client_addr, sizeof(client_addr)) < 0)
-    // {
-    //     perror("Error in binding client socket");
-    //     exit(1);
-    // }
-    // int listen_status = listen(client_socket, MAX_CLIENTS);
-    // if (listen_status < 0)
-    // {
-    //     perror("Error in listening to client socket");
-    //     exit(1);
-    // }
 
     struct sockaddr_in client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
@@ -1045,14 +993,14 @@ void *Handle_client_requests(void *arg)
     while (1)
     {
         printf("Waiting for client connection\n");
-        int accept_status = accept(nm_server_socket, (struct sockaddr *)&client_addr, &client_addr_len);
-        if (accept_status < 0)
+        clients_File_Descriptors[client_count++] = accept(nm_server_socket, (struct sockaddr *)&client_addr, &client_addr_len);
+        if (clients_File_Descriptors[client_count-1] < 0)
         {
             perror("Error in accepting connection from client");
             exit(1);
         }
         pthread_t thread;
-        pthread_create(&thread, NULL, process_client_requests, &accept_status);
+        pthread_create(&thread, NULL, process_client_requests, &clients_File_Descriptors[client_count-1]);
         // pthread_detach(thread);
     }
 }
@@ -1104,60 +1052,73 @@ void init_log_print()
     sa.sa_flags = SA_RESTART;
     sigaction(SIGTSTP, &sa, NULL);
 }
-// int ping_server(const char *ip, int port)
-// {
-//     int sock = socket(AF_INET, SOCK_STREAM, 0);
-//     if (sock < 0)
-//     {
-//         return 0; // Socket creation failed
-//     }
 
-//     // // Set socket timeout to 2 seconds
-//     // struct timeval timeout;
-//     // timeout.tv_sec = 2;
-//     // timeout.tv_usec = 0;
-//     // setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-//     // setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+int ping_server(const char *ip, int port)
+{
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0)
+    {
+        return 0; // Socket creation failed
+    }
+    // Set up server address
+    struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(port);
+    inet_pton(AF_INET, ip, &server_addr.sin_addr);
+    int send_it = 0;
 
-//     // Set up server address
-//     struct sockaddr_in server_addr;
-//     memset(&server_addr, 0, sizeof(server_addr));
-//     server_addr.sin_family = AF_INET;
-//     server_addr.sin_port = htons(port);
-//     inet_pton(AF_INET, ip, &server_addr.sin_addr);
+    // Try to connect
+    int result = connect(sock, (struct sockaddr *)&server_addr, sizeof(server_addr));
+    if (result < 0)
+    {
+        storage_servers[storage_server_count].server_down = true;
+        perror("Error in connecting to storage server");
+        printf("Server %s:%d is down\n", ip, port);
+    }
+    else
+    {
+        send_it = send(sock, "EXIT", strlen("EXIT"), 0);
+        if (send_it < 0)
+        {
+            storage_servers[storage_server_count].server_down = true;
+            perror("Error in sending data to storage server");
+            printf("Server %s:%d is down\n", ip, port);
+        }
+    }
+    close(sock);
+    result = (result >= 0 && send_it >= 0);
+    return result; // Return 1 if connected, 0 if failed
+}
 
-//     // Try to connect
-//     int result = connect(sock, (struct sockaddr *)&server_addr, sizeof(server_addr));
-//     close(sock);
+void *Server_Status(void *arg)
+{
 
-//     return (result >= 0); // Return 1 if connected, 0 if failed
-// }
+    while (1)
+    {
+        for (int i = 0; i < storage_server_count; i++)
+        {
+            // printf("Checking status of storage server %d\n", i);
 
-// void *Server_Status(void *arg)
-// {
-
-//     while (1)
-//     {
-//         for (int i = 0; i < storage_server_count; i++)
-//         {
-//             if (!ping_server(storage_servers[i].ip, storage_servers[i].server_port))
-//             {
-//                 printf("Storage server %d is down\n", i);
-//                 return NULL;
-//                 // Remove the server from the trie
-//                 // remove_storage_server(trie_root, i);
-//             }
-//         }
-//     }
-// }
+            if (storage_servers[i].server_down==false && ping_server(storage_servers[i].ip, storage_servers[i].server_port)==0)
+            {
+                printf("Storage server %d is down\n", i);
+                storage_servers[i].server_down = true;
+                // Remove the server from the trie
+                // remove_storage_server(trie_root, i);
+            }
+        }
+        sleep(5);
+    }
+}
 
 int main()
 {
     init_log_print();
     init_file_location_cache();
     initialze_storage_server();
-    // pthread_t server_active_thread;
-    // pthread_create(&server_active_thread, NULL, Server_Status, NULL);
+    pthread_t server_active_thread;
+    pthread_create(&server_active_thread, NULL, Server_Status, NULL);
     pthread_t client_thread;
     pthread_create(&client_thread, NULL, Handle_client_requests, NULL);
     pthread_join(client_thread, NULL);
