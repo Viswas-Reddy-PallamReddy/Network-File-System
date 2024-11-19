@@ -118,7 +118,7 @@ void handle_ss(char *input,char *buff,int nm_socket)
 {
     char ss_ip[INET_ADDRSTRLEN];
     int ss_port;
-    if(strncmp("buff","IP",2)!=0)
+    if(strncmp(buff,"IP",2)!=0)
     {
         int error_code;
         sscanf(buff, "ERROR %d\n", &error_code);
