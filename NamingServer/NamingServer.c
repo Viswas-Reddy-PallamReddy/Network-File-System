@@ -70,11 +70,11 @@ void add_storage_server(int accept_status)
     int te_port = atoi(temp_3[1]);
     for(int i=0;i<storage_server_count;i++)
     {
-        if(storage_servers[i].server_port == te_port)
+         if (storage_servers[i].server_port == te_port && strcmp(storage_servers[i].ip, temp_3[0]) == 0)
         {
             printf("\033[0;32mStorage server coming back online\n\033[0m");
             storage_servers[i].server_down = false;
-            /// need to call a function 
+            /// need to call a function
         }
     }
 
