@@ -121,8 +121,9 @@ void handle_ss(char *input,char *buff,int nm_socket)
     if(strncmp("buff","IP",2)!=0)
     {
         int error_code;
-        sscanf(buff, "ERROR %d", &error_code);
+        sscanf(buff, "ERROR %d\n", &error_code);
         printf("Error %d : %s\n", error_code,error_message(error_code));
+        // printf("Error : %s\n", buff);
         return;
     }
     printf("%s\n",buff);
@@ -284,5 +285,5 @@ void play_audio_stream(int server_socket)
 }
 
 void* write_thread(void *arg) {
-    
+
 }
