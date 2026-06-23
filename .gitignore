@@ -1,0 +1,16 @@
+# Object files
+*.o
+
+# Compiled binaries
+NamingServer
+a.out
+*.out
+*.exe
+
+# Runtime log written by the Naming Server
+Log.txt
+
+# Editor / OS cruft
+.vscode/
+.idea/
+.DS_Store
